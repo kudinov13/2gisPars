@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PARSER // COMPANY INTEL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Inter:wght@900;800;700;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ===== RESET ===== */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+:root{
+  --bg:#0A0A0A;
+  --bg-card:#111111;
+  --bg-hover:#161616;
+  --fg:#EAEAEA;
+  --fg-dim:#666666;
+  --fg-mid:#999999;
+  --accent:#FF2A2A;
+  --accent-dim:#8B0000;
+  --green:#4AF626;
+  --border:#222222;
+  --border-bright:#333333;
+  --mono:'JetBrains Mono',monospace;
+  --sans:'Inter',sans-serif;
+}
+
+html,body{
+  background:var(--bg);
+  color:var(--fg);
+  font-family:var(--mono);
+  font-size:13px;
+  height:100vh;
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ===== NOISE OVERLAY ===== */
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:9999;
+  opacity:0.03;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' /%3E%3C/svg%3E");
+}
+
+/* ===== SCANLINES ===== */
+body::after{
+  content:'';
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:9998;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.015) 2px,rgba(255,255,255,0.015) 4px);
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border-bright)}
+::-webkit-scrollbar-thumb:hover{background:var(--accent-dim)}
+
+/* ===== LAYOUT ===== */
+.app{
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+  height:100vh;
+}
+
+/* ===== HEADER ===== */
+.header{
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  padding:0 24px;
+  height:56px;
+  border-bottom:1px solid var(--border);
+  background:var(--bg);
+  gap:24px;
+}
+
+.logo{
+  font-family:var(--sans);
+  font-weight:900;
+  font-size:18px;
+  letter-spacing:-0.04em;
+  text-transform:uppercase;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.logo span{color:var(--accent)}
+
+.header-meta{
+  display:flex;
+  gap:24px;
+  font-size:10px;
+  color:var(--fg-dim);
+  text-transform:uppercase;
+  letter-spacing:0.1em;
+  justify-self:center;
+}
+.header-meta b{color:var(--fg-mid);font-weight:400}
+
+.status-indicator{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:0.1em;
+  color:var(--fg-dim);
+}
+.status-dot{
+  width:8px;
+  height:8px;
+  background:var(--fg-dim);
+  border-radius:0;
+}
+.status-dot.active{
+  background:var(--green);
+  box-shadow:0 0 8px var(--green);
+  animation:pulse 1.5s ease-in-out infinite;
+}
+.status-dot.error{
+  background:var(--accent);
+  box-shadow:0 0 8px var(--accent);
+}
+
+@keyframes pulse{
+  0%,100%{opacity:1}
+  50%{opacity:0.4}
+}
+
+/* ===== MAIN GRID ===== */
+.main{
+  display:grid;
+  grid-template-columns:380px 1fr;
+  overflow:hidden;
+}
+
+/* ===== SIDEBAR (CONTROLS) ===== */
+.sidebar{
+  border-right:1px solid var(--border);
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+}
+
+.section{
+  border-bottom:1px solid var(--border);
+  padding:20px 24px;
+}
+
+.section-title{
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:0.15em;
+  color:var(--fg-dim);
+  margin-bottom:16px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.section-title::before{
+  content:'';
+  width:12px;
+  height:1px;
+  background:var(--accent);
+}
+
+/* ===== FORM FIELDS ===== */
+.field{margin-bottom:16px}
+.field:last-child{margin-bottom:0}
+
+.field-label{
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:0.1em;
+  color:var(--fg-dim);
+  margin-bottom:6px;
+  display:block;
+}
+
+.field-input{
+  width:100%;
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  color:var(--fg);
+  padding:10px 12px;
+  font-family:var(--mono);
+  font-size:12px;
+  outline:none;
+  transition:border-color 0.2s,background 0.2s;
+}
+.field-input:focus{
+  border-color:var(--accent);
+  background:var(--bg-hover);
+}
+.field-input::placeholder{color:var(--fg-dim)}
+
+.field-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+
+/* ===== TOGGLE SWITCH ===== */
+.toggle{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 0;
+  cursor:pointer;
+  user-select:none;
+  border-bottom:1px solid var(--border);
+  transition:padding-left 0.2s;
+}
+.toggle:hover{padding-left:4px}
+.toggle:last-child{border-bottom:none}
+
+.toggle-label{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  color:var(--fg);
+}
+.toggle-desc{
+  font-size:9px;
+  color:var(--fg-dim);
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+  margin-top:2px;
+}
+
+.toggle-switch{
+  width:40px;
+  height:20px;
+  background:var(--bg-card);
+  border:1px solid var(--border-bright);
+  position:relative;
+  transition:all 0.25s cubic-bezier(0.4,0,0.2,1);
+  flex-shrink:0;
+}
+.toggle-switch::after{
+  content:'';
+  position:absolute;
+  top:2px;
+  left:2px;
+  width:14px;
+  height:14px;
+  background:var(--fg-dim);
+  transition:all 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+.toggle.active .toggle-switch{
+  border-color:var(--accent);
+  background:rgba(255,42,42,0.1);
+}
+.toggle.active .toggle-switch::after{
+  left:22px;
+  background:var(--accent);
+  box-shadow:0 0 6px var(--accent);
+}
+
+/* ===== SLIDER ===== */
+.slider-wrap{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-top:8px;
+  overflow:hidden;
+  max-height:0;
+  opacity:0;
+  transition:max-height 0.3s,opacity 0.3s;
+}
+.slider-wrap.visible{
+  max-height:60px;
+  opacity:1;
+}
+
+.slider{
+  flex:1;
+  -webkit-appearance:none;
+  appearance:none;
+  height:2px;
+  background:var(--border-bright);
+  outline:none;
+}
+.slider::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  appearance:none;
+  width:14px;
+  height:14px;
+  background:var(--accent);
+  cursor:pointer;
+  border-radius:0;
+}
+.slider-value{
+  font-size:11px;
+  color:var(--accent);
+  min-width:50px;
+  text-align:right;
+}
+
+/* ===== BUTTONS ===== */
+.btn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  width:100%;
+  padding:14px 20px;
+  font-family:var(--sans);
+  font-weight:800;
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:0.1em;
+  border:none;
+  cursor:pointer;
+  transition:all 0.2s;
+  position:relative;
+  overflow:hidden;
+}
+
+.btn-primary{
+  background:var(--accent);
+  color:#fff;
+}
+.btn-primary:hover{
+  background:#ff4444;
+  box-shadow:0 0 20px rgba(255,42,42,0.4);
+}
+.btn-primary:active{transform:scale(0.98)}
+.btn-primary:disabled{
+  background:var(--border-bright);
+  color:var(--fg-dim);
+  cursor:not-allowed;
+  box-shadow:none;
+}
+
+.btn-secondary{
+  background:transparent;
+  color:var(--fg);
+  border:1px solid var(--border-bright);
+}
+.btn-secondary:hover{
+  border-color:var(--fg);
+  background:var(--bg-hover);
+}
+
+.btn-stop{
+  background:transparent;
+  color:var(--accent);
+  border:1px solid var(--accent);
+}
+.btn-stop:hover{
+  background:rgba(255,42,42,0.1);
+}
+
+/* Button shine animation */
+.btn-primary::before{
+  content:'';
+  position:absolute;
+  top:0;
+  left:-100%;
+  width:100%;
+  height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent);
+  transition:left 0.5s;
+}
+.btn-primary:hover::before{left:100%}
+
+/* ===== CONTENT AREA ===== */
+.content{
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+/* ===== PROGRESS BAR ===== */
+.progress-bar{
+  height:3px;
+  background:var(--border);
+  position:relative;
+  overflow:hidden;
+}
+.progress-fill{
+  position:absolute;
+  top:0;
+  left:0;
+  height:100%;
+  background:var(--accent);
+  width:0%;
+  transition:width 0.3s;
+  box-shadow:0 0 10px var(--accent);
+}
+.progress-fill::after{
+  content:'';
+  position:absolute;
+  top:0;
+  right:0;
+  height:100%;
+  width:30px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.4));
+  animation:shimmer 1.5s infinite;
+}
+@keyframes shimmer{
+  0%{transform:translateX(0)}
+  100%{transform:translateX(30px)}
+}
+
+/* ===== STATUS LINE ===== */
+.status-line{
+  padding:10px 24px;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:0.1em;
+  color:var(--fg-dim);
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-height:36px;
+}
+.status-line .step{color:var(--fg)}
+.status-line .blink{
+  display:inline-block;
+  width:8px;
+  height:13px;
+  background:var(--accent);
+  animation:blink 1s steps(2) infinite;
+}
+@keyframes blink{50%{opacity:0}}
+
+/* ===== RESULTS TABLE ===== */
+.results-area{
+  flex:1;
+  overflow:auto;
+  position:relative;
+}
+
+.results-empty{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  height:100%;
+  color:var(--fg-dim);
+  gap:16px;
+}
+.results-empty .big-text{
+  font-family:var(--sans);
+  font-weight:900;
+  font-size:clamp(2rem,5vw,4rem);
+  letter-spacing:-0.05em;
+  text-transform:uppercase;
+  color:var(--border-bright);
+  text-align:center;
+  line-height:0.9;
+}
+.results-empty .sub-text{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:0.15em;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:11px;
+}
+
+thead{
+  position:sticky;
+  top:0;
+  z-index:10;
+  background:var(--bg);
+}
+
+th{
+  text-align:left;
+  padding:10px 14px;
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:0.12em;
+  color:var(--fg-dim);
+  font-weight:700;
+  border-bottom:1px solid var(--border-bright);
+  white-space:nowrap;
+}
+
+td{
+  padding:10px 14px;
+  border-bottom:1px solid var(--border);
+  vertical-align:top;
+  color:var(--fg-mid);
+  max-width:200px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+tr{
+  transition:background 0.15s;
+  cursor:pointer;
+}
+tr:hover td{
+  background:var(--bg-hover);
+  color:var(--fg);
+}
+
+/* Row animations */
+tr.row-enter{
+  animation:rowSlide 0.3s ease-out;
+}
+@keyframes rowSlide{
+  from{opacity:0;transform:translateX(-10px)}
+  to{opacity:1;transform:translateX(0)}
+}
+
+/* Young company highlight */
+tr.young td{
+  background:rgba(255,42,42,0.05);
+}
+tr.young td:first-child{
+  border-left:2px solid var(--accent);
+}
+
+/* Critical issues */
+.critical-badge{
+  display:inline-block;
+  background:var(--accent);
+  color:#fff;
+  padding:2px 6px;
+  font-size:9px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  margin-right:4px;
+}
+.issue-text{
+  color:var(--fg-dim);
+  font-size:10px;
+}
+.critical-text{
+  color:var(--accent);
+  font-size:10px;
+}
+
+/* ===== EXPANDED ROW ===== */
+tr.expanded td{
+  background:var(--bg-card);
+  color:var(--fg);
+  white-space:normal;
+  max-width:none;
+}
+.expand-content{
+  padding:8px 0;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+}
+.expand-section h4{
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:0.1em;
+  color:var(--fg-dim);
+  margin-bottom:6px;
+}
+.expand-section ul{
+  list-style:none;
+  font-size:10px;
+}
+.expand-section li{
+  padding:3px 0;
+  color:var(--fg-mid);
+}
+.expand-section li::before{content:'› ';color:var(--accent)}
+
+/* ===== FOOTER ===== */
+.footer{
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  padding:0 24px;
+  height:36px;
+  border-top:1px solid var(--border);
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:0.1em;
+  color:var(--fg-dim);
+  gap:16px;
+}
+.footer-stats{
+  display:flex;
+  gap:24px;
+  justify-self:center;
+}
+.footer-stats span b{color:var(--fg);font-weight:400}
+
+/* ===== LOADING SPINNER ===== */
+.spinner{
+  display:inline-block;
+  width:12px;
+  height:12px;
+  border:2px solid var(--border-bright);
+  border-top-color:var(--accent);
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== FADE IN ===== */
+.fade-in{animation:fadeIn 0.4s ease-out}
+@keyframes fadeIn{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* ===== GLITCH EFFECT ===== */
+.glitch{
+  position:relative;
+}
+.glitch:hover::before,.glitch:hover::after{
+  content:attr(data-text);
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  overflow:hidden;
+}
+.glitch:hover::before{
+  color:var(--accent);
+  animation:glitchTop 0.3s linear;
+  clip-path:polygon(0 0,100% 0,100% 33%,0 33%);
+}
+.glitch:hover::after{
+  color:var(--green);
+  animation:glitchBot 0.3s linear;
+  clip-path:polygon(0 67%,100% 67%,100% 100%,0 100%);
+}
+@keyframes glitchTop{
+  0%{transform:translate(0)}
+  20%{transform:translate(-2px,-1px)}
+  40%{transform:translate(2px,1px)}
+  60%{transform:translate(-1px,0)}
+  100%{transform:translate(0)}
+}
+@keyframes glitchBot{
+  0%{transform:translate(0)}
+  20%{transform:translate(2px,1px)}
+  40%{transform:translate(-2px,-1px)}
+  60%{transform:translate(1px,0)}
+  100%{transform:translate(0)}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== HEADER ===== -->
+  <header class="header">
+    <div class="logo glitch" data-text="PARSER//">PARSER<span>//</span>COMPANY INTEL</div>
+    <div class="header-meta">
+      <span><b>SYS:</b> 2GIS SCRAPER</span>
+      <span><b>VER:</b> 1.0.0</span>
+      <span><b>MODE:</b> DESKTOP</span>
+    </div>
+    <div class="status-indicator">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">IDLE</span>
+    </div>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <div class="main">
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar">
+
+      <!-- Search params -->
+      <div class="section">
+        <div class="section-title">[ SEARCH PARAMETERS ]</div>
+
+        <div class="field">
+          <label class="field-label" id="regionLabel">Республика / Область / Край <span style="color:var(--accent);font-size:9px">если заполнен — город игнорируется</span></label>
+          <input type="text" class="field-input" id="region" placeholder="Напр: Республика Алтай">
+        </div>
+
+        <div class="field">
+          <label class="field-label">Город <span id="cityHint" style="color:var(--fg-dim);font-size:9px">используется если регион не заполнен</span></label>
+          <input type="text" class="field-input" id="city" value="Новосибирск" placeholder="Введите город">
+        </div>
+
+        <div class="field">
+          <label class="field-label">Сфера деятельности</label>
+          <input type="text" class="field-input" id="rubric" value="стоматология" placeholder="Напр: ремонт квартир">
+        </div>
+
+        <div class="field">
+          <label class="field-label">VK токен (опционально)</label>
+          <input type="password" class="field-input" id="vkToken" placeholder="Для возраста групп">
+        </div>
+
+        <div class="field">
+          <label class="field-label">Макс. результатов</label>
+          <input type="number" class="field-input" id="maxResults" value="500" min="10" max="5000">
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="section">
+        <div class="section-title">[ FILTERS ]</div>
+
+        <div class="toggle active" data-toggle="requireMessenger">
+          <div>
+            <div class="toggle-label">Наличие мессенджера</div>
+            <div class="toggle-desc">VK / Telegram / WhatsApp</div>
+          </div>
+          <div class="toggle-switch"></div>
+        </div>
+
+        <div class="toggle active" data-toggle="requirePhone">
+          <div>
+            <div class="toggle-label">Наличие телефона</div>
+            <div class="toggle-desc">Обязательный контакт</div>
+          </div>
+          <div class="toggle-switch"></div>
+        </div>
+
+        <div class="toggle" data-toggle="onlyYoung">
+          <div>
+            <div class="toggle-label">Только молодые компании</div>
+            <div class="toggle-desc">Недавно открытые</div>
+          </div>
+          <div class="toggle-switch"></div>
+        </div>
+
+        <div class="slider-wrap" id="youngMonthsWrap">
+          <input type="range" class="slider" id="youngMonths" min="3" max="60" value="24">
+          <span class="slider-value" id="youngMonthsVal">24 мес</span>
+        </div>
+      </div>
+
+      <!-- Site check -->
+      <div class="section">
+        <div class="section-title">[ WEBSITE AUDIT ]</div>
+
+        <div class="toggle active" data-toggle="checkWebsites">
+          <div>
+            <div class="toggle-label">Проверять сайты</div>
+            <div class="toggle-desc">Аудит на ошибки</div>
+          </div>
+          <div class="toggle-switch"></div>
+        </div>
+
+        <div class="toggle active" data-toggle="skipGood">
+          <div>
+            <div class="toggle-label">Пропускать хорошие сайты</div>
+            <div class="toggle-desc">Без значительных проблем</div>
+          </div>
+          <div class="toggle-switch"></div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="section" style="border-bottom:none;flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:10px">
+        <button class="btn btn-primary" id="startBtn">
+          <span>▶ ЗАПУСТИТЬ ПАРСЕР</span>
+        </button>
+        <button class="btn btn-stop" id="stopBtn" style="display:none">
+          <span>■ ОСТАНОВИТЬ</span>
+        </button>
+        <button class="btn btn-secondary" id="downloadBtn" style="display:none">
+          <span>↓ СКАЧАТЬ EXCEL</span>
+        </button>
+      </div>
+
+    </aside>
+
+    <!-- ===== CONTENT ===== -->
+    <div class="content">
+
+      <!-- Progress -->
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+
+      <!-- Status line -->
+      <div class="status-line">
+        <span class="blink" id="blinkCursor" style="display:none"></span>
+        <span class="step" id="statusStep">Ожидание запуска...</span>
+      </div>
+
+      <!-- Results -->
+      <div class="results-area" id="resultsArea">
+        <div class="results-empty" id="resultsEmpty">
+          <div class="big-text">NO<br>DATA</div>
+          <div class="sub-text">// Запустите парсер для поиска компаний</div>
+        </div>
+        <table id="resultsTable" style="display:none">
+          <thead>
+            <tr>
+              <th style="width:30px">#</th>
+              <th>Название</th>
+              <th>Телефон</th>
+              <th>Сайт</th>
+              <th>Мессенджеры</th>
+              <th>Возраст</th>
+              <th>Проблемы сайта</th>
+              <th>Рубрики</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="footer">
+    <span>PARSER//COMPANY INTEL ™</span>
+    <div class="footer-stats">
+      <span><b>Найдено:</b> <span id="statFound">0</span></span>
+      <span><b>В работе:</b> <span id="statProgress">0/0</span></span>
+      <span><b>Молодых:</b> <span id="statYoung">0</span></span>
+    </div>
+    <span id="footerTime">--:--:--</span>
+  </footer>
+
+</div>
+
+<script>
+// ===== STATE =====
+const state = {
+  toggles: {
+    requireMessenger: true,
+    requirePhone: true,
+    onlyYoung: false,
+    checkWebsites: true,
+    skipGood: true,
+  },
+  polling: null,
+  results: [],
+};
+
+// ===== TOGGLES =====
+document.querySelectorAll('.toggle').forEach(el => {
+  el.addEventListener('click', () => {
+    const key = el.dataset.toggle;
+    state.toggles[key] = !state.toggles[key];
+    el.classList.toggle('active', state.toggles[key]);
+
+    if (key === 'onlyYoung') {
+      document.getElementById('youngMonthsWrap').classList.toggle('visible', state.toggles[key]);
+    }
+  });
+});
+
+// ===== SLIDER =====
+const youngMonths = document.getElementById('youngMonths');
+const youngMonthsVal = document.getElementById('youngMonthsVal');
+youngMonths.addEventListener('input', () => {
+  youngMonthsVal.textContent = youngMonths.value + ' мес';
+});
+
+// ===== START BUTTON =====
+document.getElementById('startBtn').addEventListener('click', startParser);
+document.getElementById('stopBtn').addEventListener('click', stopParser);
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  window.open('/api/download', '_blank');
+});
+
+// ===== PARSER CONTROL =====
+async function startParser() {
+  const regionVal = document.getElementById('region').value.trim();
+  const config = {
+    city: document.getElementById('city').value.trim(),
+    region: regionVal,
+    rubric: document.getElementById('rubric').value.trim(),
+    vk_token: document.getElementById('vkToken').value.trim(),
+    max_results: parseInt(document.getElementById('maxResults').value) || 500,
+    require_messenger: state.toggles.requireMessenger,
+    require_phone: state.toggles.requirePhone,
+    only_young: state.toggles.onlyYoung,
+    young_months: parseInt(youngMonths.value),
+    check_websites: state.toggles.checkWebsites,
+    skip_good_sites: state.toggles.skipGood,
+  };
+
+  if ((!config.city && !config.region) || !config.rubric) {
+    showStatus('ERROR: Укажите город или регион, и сферу деятельности', true);
+    return;
+  }
+  // UI state
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('stopBtn').style.display = 'flex';
+  document.getElementById('downloadBtn').style.display = 'none';
+  document.getElementById('statusDot').classList.add('active');
+  document.getElementById('statusDot').classList.remove('error');
+  document.getElementById('statusText').textContent = 'RUNNING';
+  document.getElementById('blinkCursor').style.display = 'inline-block';
+  document.getElementById('resultsEmpty').style.display = 'none';
+  document.getElementById('resultsTable').style.display = 'none';
+  document.getElementById('resultsBody').innerHTML = '';
+  state.results = [];
+
+  try {
+    const resp = await fetch('/api/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(config),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      showStatus('ERROR: ' + data.error, true);
+      resetUI();
+      return;
+    }
+    startPolling();
+  } catch(e) {
+    showStatus('ERROR: ' + e.message, true);
+    resetUI();
+  }
+}
+
+async function stopParser() {
+  await fetch('/api/stop', {method: 'POST'});
+  resetUI();
+  showStatus('Остановлено пользователем', false);
+}
+
+function startPolling() {
+  if (state.polling) clearInterval(state.polling);
+  state.polling = setInterval(pollStatus, 500);
+}
+
+async function pollStatus() {
+  try {
+    const resp = await fetch('/api/status');
+    const data = await resp.json();
+
+    // Update progress
+    if (data.total > 0) {
+      const pct = (data.progress / data.total) * 100;
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('statProgress').textContent = data.progress + '/' + data.total;
+    } else {
+      document.getElementById('progressFill').style.width = data.finished ? '100%' : '0%';
+    }
+
+    // Update status
+    document.getElementById('statusStep').textContent = data.current_step || '...';
+
+    if (data.error) {
+      showStatus('ERROR: ' + data.error, true);
+      resetUI();
+      return;
+    }
+
+    if (data.finished) {
+      await loadResults();
+      resetUI();
+      showStatus('Готово. Найдено: ' + state.results.length + ' компаний', false);
+    }
+  } catch(e) {
+    console.error('Poll error:', e);
+  }
+}
+
+async function loadResults() {
+  const resp = await fetch('/api/results');
+  const data = await resp.json();
+  state.results = data.results || [];
+  renderResults();
+}
+
+function renderResults() {
+  const tbody = document.getElementById('resultsBody');
+  const table = document.getElementById('resultsTable');
+  const empty = document.getElementById('resultsEmpty');
+
+  if (state.results.length === 0) {
+    table.style.display = 'none';
+    empty.style.display = 'flex';
+    empty.querySelector('.big-text').innerHTML = 'NO<br>RESULTS';
+    empty.querySelector('.sub-text').textContent = '// Компании не найдены по заданным критериям';
+    return;
+  }
+
+  table.style.display = 'table';
+  empty.style.display = 'none';
+  tbody.innerHTML = '';
+
+  let youngCount = 0;
+
+  state.results.forEach((c, i) => {
+    if (c.is_young) youngCount++;
+
+    const messengers = [];
+    if (c.vk && c.vk !== '—') messengers.push('VK');
+    if (c.telegram && c.telegram !== '—') messengers.push('TG');
+    if (c.whatsapp && c.whatsapp !== '—') messengers.push('WA');
+
+    const tr = document.createElement('tr');
+    tr.classList.add('row-enter');
+    if (c.is_young) tr.classList.add('young');
+    tr.style.animationDelay = (i * 0.03) + 's';
+
+    const criticalHtml = c.site_critical.length > 0
+      ? c.site_critical.map(x => `<div class="critical-text">⚠ ${escapeHtml(x)}</div>`).join('')
+      : '';
+    const issuesHtml = c.site_issues.length > 0
+      ? c.site_issues.map(x => `<div class="issue-text">• ${escapeHtml(x)}</div>`).join('')
+      : '';
+    const siteProblems = criticalHtml + issuesHtml || '<span class="issue-text">—</span>';
+
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td style="color:var(--fg);font-weight:600">${escapeHtml(c.name)}</td>
+      <td>${escapeHtml(c.phone)}</td>
+      <td>${c.website !== '—' ? escapeHtml(c.website) : '<span style="color:var(--fg-dim)">—</span>'}</td>
+      <td>${messengers.length > 0 ? messengers.map(m => `<span class="critical-badge" style="background:var(--border-bright);color:var(--fg)">${m}</span>`).join('') : '<span style="color:var(--fg-dim)">—</span>'}</td>
+      <td>${c.age_months !== null ? escapeHtml(c.age_display) : '<span style="color:var(--fg-dim)">?</span>'}${c.is_young ? ' <span class="critical-badge">YOUNG</span>' : ''}</td>
+      <td>${siteProblems}</td>
+      <td style="color:var(--fg-dim)">${escapeHtml(c.rubrics)}</td>
+    `;
+
+    // Expand row on click
+    tr.addEventListener('click', () => toggleExpandRow(tr, c));
+
+    tbody.appendChild(tr);
+  });
+
+  // Update stats
+  document.getElementById('statFound').textContent = state.results.length;
+  document.getElementById('statYoung').textContent = youngCount;
+  document.getElementById('downloadBtn').style.display = 'flex';
+}
+
+function toggleExpandRow(tr, company) {
+  const existing = tr.nextElementSibling;
+  if (existing && existing.classList.contains('expanded')) {
+    existing.remove();
+    return;
+  }
+
+  const expandTr = document.createElement('tr');
+  expandTr.classList.add('expanded');
+  const td = document.createElement('td');
+  td.colSpan = 8;
+
+  const criticalList = company.site_critical.length > 0
+    ? company.site_critical.map(x => `<li>${escapeHtml(x)}</li>`).join('')
+    : '<li style="color:var(--fg-dim)">Нет критичных проблем</li>';
+
+  const issuesList = company.site_issues.length > 0
+    ? company.site_issues.map(x => `<li>${escapeHtml(x)}</li>`).join('')
+    : '<li style="color:var(--fg-dim)">Нет минорных проблем</li>';
+
+  const contacts = [];
+  if (company.phone) contacts.push(`<li>Телефон: ${escapeHtml(company.phone)}</li>`);
+  if (company.website !== '—') contacts.push(`<li>Сайт: ${escapeHtml(company.website)}</li>`);
+  if (company.vk !== '—') contacts.push(`<li>VK: ${escapeHtml(company.vk)}</li>`);
+  if (company.telegram !== '—') contacts.push(`<li>Telegram: ${escapeHtml(company.telegram)}</li>`);
+  if (company.whatsapp !== '—') contacts.push(`<li>WhatsApp: ${escapeHtml(company.whatsapp)}</li>`);
+
+  td.innerHTML = `
+    <div class="expand-content">
+      <div class="expand-section">
+        <h4>// КОНТАКТЫ</h4>
+        <ul>${contacts.join('')}</ul>
+        <h4 style="margin-top:10px">// АДРЕС</h4>
+        <ul><li>${escapeHtml(company.address) || '—'}</li></ul>
+      </div>
+      <div class="expand-section">
+        <h4>// КРИТИЧНЫЕ ПРОБЛЕМЫ САЙТА</h4>
+        <ul>${criticalList}</ul>
+        <h4 style="margin-top:10px">// МИНОРНЫЕ ПРОБЛЕМЫ САЙТА</h4>
+        <ul>${issuesList}</ul>
+      </div>
+    </div>
+  `;
+
+  expandTr.appendChild(td);
+  tr.after(expandTr);
+}
+
+// ===== HELPERS =====
+function showStatus(msg, isError) {
+  document.getElementById('statusStep').textContent = msg;
+  if (isError) {
+    document.getElementById('statusDot').classList.add('error');
+    document.getElementById('statusDot').classList.remove('active');
+    document.getElementById('statusText').textContent = 'ERROR';
+  }
+}
+
+function resetUI() {
+  if (state.polling) {
+    clearInterval(state.polling);
+    state.polling = null;
+  }
+  document.getElementById('startBtn').style.display = 'flex';
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('blinkCursor').style.display = 'none';
+  const dot = document.getElementById('statusDot');
+  dot.classList.remove('active', 'error');
+  document.getElementById('statusText').textContent = 'IDLE';
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ===== REGION / CITY INTERACTION =====
+const regionInput = document.getElementById('region');
+const cityInput = document.getElementById('city');
+const cityHint = document.getElementById('cityHint');
+
+function updateCityRegionState() {
+  const hasRegion = regionInput.value.trim().length > 0;
+  if (hasRegion) {
+    cityInput.style.opacity = '0.35';
+    cityInput.style.pointerEvents = 'none';
+    cityHint.textContent = 'игнорируется, так как заполнен регион';
+    cityHint.style.color = 'var(--accent)';
+  } else {
+    cityInput.style.opacity = '1';
+    cityInput.style.pointerEvents = 'auto';
+    cityHint.textContent = 'используется если регион не заполнен';
+    cityHint.style.color = 'var(--fg-dim)';
+  }
+}
+
+regionInput.addEventListener('input', updateCityRegionState);
+updateCityRegionState();
+
+// ===== CLOCK =====
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const s = String(now.getSeconds()).padStart(2, '0');
+  document.getElementById('footerTime').textContent = h + ':' + m + ':' + s;
+}
+setInterval(updateClock, 1000);
+updateClock();
+</script>
+</body>
+</html>
