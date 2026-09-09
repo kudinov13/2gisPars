@@ -19,6 +19,6 @@ companies = search_companies_sync(
 print(f"\nИтого: {len(companies)} компаний")
 for c in companies[:10]:
     print(f"  - {c.name}")
-    print(f"    тел: {c.primary_phone}, сайт: {c.website or '—'}")
-    print(f"    VK: {c.vk_url or '—'}, TG: {c.telegram_url or '—'}, WA: {c.whatsapp_url or '—'}")
+    print(f"    тел: {c.primary_phone}, сайт: {c.website or '-'}")
+    print(f"    VK: {c.vk_url or '-'}, TG: {c.telegram_url or '-'}, WA: {c.whatsapp_url or '-'}")
     print()

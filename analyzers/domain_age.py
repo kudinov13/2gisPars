@@ -73,7 +73,7 @@ def _get_domain_age_rdap(domain: str, timeout: int) -> Optional[datetime]:
 
 def _get_domain_age_whois(domain: str, timeout: int) -> Optional[datetime]:
     """Получает дату регистрации через WHOIS (port 43).
-    Надёжно для .ru/.su/.рф доменов — использует сервер TLD."""
+    Надёжно для .ru/.su/.рф доменов - использует сервер TLD."""
     tld = domain.rsplit(".", 1)[-1].lower() if "." in domain else ""
 
     # Выбор WHOIS-сервера по TLD

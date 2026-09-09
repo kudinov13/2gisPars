@@ -10,13 +10,13 @@ from models import Company
 
 logger = logging.getLogger(__name__)
 
-# Словарь регион (республика/область/край) → slug 2GIS (столица/главный город региона)
+# Словарь регион (республика/область/край) -> slug 2GIS (столица/главный город региона)
 # 2GIS использует slug столицы региона, но поиск охватывает весь регион
 REGION_SLUG = {
     # Республики РФ
-    "республика алтай": "gorno-altaysk",
-    "алтай": "gorno-altaysk",
-    "горный алтай": "gorno-altaysk",
+    "республика алтай": "gornoaltaysk",
+    "алтай": "gornoaltaysk",
+    "горный алтай": "gornoaltaysk",
     "республика адыгея": "maykop",
     "адыгея": "maykop",
     "республика башкортостан": "ufa",
@@ -158,15 +158,15 @@ REGION_ADDRESS_KEYWORDS = {
 
 
 def _get_region_slug(region: str) -> str:
-    """Возвращает 2GIS-slug для региона. Если не найден — транслитерирует."""
+    """Возвращает 2GIS-slug для региона. Если не найден - транслитерирует."""
     key = region.lower().strip()
     # Точное совпадение
     if key in REGION_SLUG:
         return REGION_SLUG[key]
     # Частичное совпадение
-    for reg_key, slug in REGION_SLUG.items():
-        if reg_key in key or key in reg_key:
-            return slug
+    matches = [(reg_key, slug) for reg_key, slug in REGION_SLUG.items() if reg_key in key or key in reg_key]
+    if matches:
+        return max(matches, key=lambda item: len(item[0]))[1]
     # Fallback: автотранслитерация
     return _auto_translit(key)
 
@@ -178,9 +178,9 @@ def _build_address_keywords(region: str) -> list[str]:
     if key in REGION_ADDRESS_KEYWORDS:
         return REGION_ADDRESS_KEYWORDS[key]
     # Частичное совпадение
-    for reg_key, kws in REGION_ADDRESS_KEYWORDS.items():
-        if reg_key in key or key in reg_key:
-            return kws
+    matches = [(reg_key, kws) for reg_key, kws in REGION_ADDRESS_KEYWORDS.items() if reg_key in key or key in reg_key]
+    if matches:
+        return max(matches, key=lambda item: len(item[0]))[1]
     # Fallback: используем само название региона как ключевое слово
     return [key]
 
@@ -188,9 +188,31 @@ def _build_address_keywords(region: str) -> list[str]:
 def _address_matches_region(address: str, region_keywords: list[str]) -> bool:
     """Проверяет, содержит ли адрес компании хотя бы одно ключевое слово региона."""
     if not address or not region_keywords:
-        return True  # Если нет адреса или ключевых слов — не отсеиваем
+        return True
     address_lower = address.lower()
     return any(kw.lower() in address_lower for kw in region_keywords)
+
+
+# Крупные города, которые часто встречаются в адресах и точно не относятся
+# к нужному региону. Используется для отсева явно чужих адресов.
+_OTHER_MAJOR_CITIES = {
+    "новосибирск", "омск", "томск", "кемерово", "красноярск", "москва",
+    "екатеринбург", "челябинск", "тюмень", "ханты-мансийск", "сургут",
+    "нижневартовск", "барнаул", "бийск", "рубцовск",
+}
+
+
+def _address_explicitly_outside_region(address: str, region_keywords: list[str]) -> bool:
+    """Возвращает True только если адрес явно содержит название другого крупного города,
+    которого нет в ключевых словах региона. Адреса без города не отбрасываются."""
+    if not address:
+        return False
+    address_lower = address.lower()
+    region_lower = {kw.lower() for kw in region_keywords}
+    for city in _OTHER_MAJOR_CITIES:
+        if city in address_lower and city not in region_lower:
+            return True
+    return False
 
 
 # Транслитерация русских городов в URL-формат 2GIS
@@ -219,7 +241,7 @@ CITY_TRANSLIT = {
     "якутск": "yakutsk", "вологда": "vologda",
     "бийск": "biysk", "нальчик": "nalchik", "назрань": "nazran",
     "магадан": "magadan", "биробиджан": "birobidzhan",
-    "анадырь": "anadyr", "горно-алтайск": "gorno-altaysk",
+    "анадырь": "anadyr", "горно-алтайск": "gornoaltaysk",
     "кызыл": "kyzyl", "абакан": "abakan", "грозный": "grozny",
     "майкоп": "maykop", "элиста": "elista", "чебоксары": "cheboksary",
     "саранск": "saransk", "ижевск": "izhevsk", "кострома": "kostroma",
@@ -228,6 +250,7 @@ CITY_TRANSLIT = {
     "мурманск": "murmansk", "петрозаводск": "petrozavodsk",
     "сыктывкар": "syktyvkar", "киров": "kirov",
     "нижневартовск": "nizhnevartovsk", "нефтеюганск": "nefteyugansk",
+    "новоалтайск": "novoaltajsk", "алейск": "alejsk", "белокуриха": "belokuriha",
     "новороссийск": "novorossiysk", "таганрог": "taganrog",
     "шахты": "shakhty", "братск": "bratsk", "ангарск": "angarsk",
     "дзержинск": "dzerzhinsk", "орск": "orsk", "каменск-уральский": "kamensk-uralsky",
@@ -240,6 +263,10 @@ CITY_TRANSLIT = {
     "актау": "aktau", "атырау": "atyrau", "актау": "aktau",
     "ташкент": "tashkent", "бишкек": "bishkek", "душанбе": "dushanbe",
     "ереван": "yerevan", "баку": "baku", "тбилиси": "tbilisi",
+    "набережные челны": "nabchelny",
+    "астрахань": "astrakhan", "набережные-челны": "nabchelny",
+    "стерлитамак": "sterlitamak", "орск": "orsk",
+    "нижнекамск": "nizhnekamsk", "альметьевск": "almetyevsk",
 }
 
 
@@ -292,13 +319,17 @@ _SOCIAL_DOMAINS = (
 )
 
 
+def _first_not_none(*values):
+    return next((value for value in values if value is not None), None)
+
+
 def _is_social_url(url: str) -> bool:
     """Проверяет, является ли URL ссылкой на соцсеть/мессенджер."""
     url_lower = url.lower()
     return any(domain in url_lower for domain in _SOCIAL_DOMAINS)
 
 
-# Мусорные домены — НЕ являются реальным сайтом компании
+# Мусорные домены - НЕ являются реальным сайтом компании
 _JUNK_DOMAINS = (
     # Агрегаторы ссылок / "визитки" (не полноценный сайт)
     "taplink.cc", "taplink.ru", "linktr.ee", "mssg.me", "lnk.bio",
@@ -320,6 +351,17 @@ _JUNK_DOMAINS = (
     ".site123.me", ".mozello.ru", ".b12sites.com", ".readymag.com",
     ".turbo.site", ".mya5.ru", ".flexbe.com", ".tb.ru",
     "object.pro",
+    # Модули бронирования 2GIS и сторонние виджеты
+    "booking.2gis", "2gis.ru/booking", "bronevik.2gis",
+    "2gis.ru/marketplace", "marketplace.2gis",
+    "order.2gis", "widget.2gis", "2gis.ru/shipping",
+    # Мусорные / ошибочные домены
+    "error.ru", "error.com", "error.net", "error.su",
+    "example.com", "example.ru", "localhost",
+    "no-site", "nosite",
+    # Дополнительные агрегаторы и визитки
+    "yclients.com", "dikidi.net", "dikidi.ru", "nailki.ru",
+    "booking.com", "ostrovok.ru", "sutochno.ru",
 )
 
 
@@ -356,24 +398,29 @@ class TwoGisScraper:
         max_results: int = 500,
         on_progress: Optional[Callable] = None,
         region: str = "",
+        should_stop: Optional[Callable[[], bool]] = None,
     ) -> list[Company]:
         from playwright.async_api import async_playwright
 
         companies: list[Company] = []
         seen_ids: set[str] = set()
         raw_items: list[dict] = []  # Сырые данные компаний из маркеров
+        pending_items: list[dict] = []  # Буфер для ответов до подтверждения города
         api_key: str = ""  # Внутренний API-ключ 2GIS, извлечённый из запросов
 
-        # Определяем slug: если задан регион — берём slug региона, иначе slug города
+        # Определяем slug: если задан регион - берём slug региона, иначе slug города
         if region and region.strip():
             location_slug = _get_region_slug(region.strip())
             region_keywords = _build_address_keywords(region.strip())
-            logger.info(f"Режим поиска по региону: '{region}' → slug='{location_slug}'")
+            logger.info(f"Режим поиска по региону: '{region}' -> slug='{location_slug}'")
             logger.info(f"Ключевые слова для фильтрации адреса: {region_keywords}")
         else:
             location_slug = _translit_city(city)
+            # Для поиска по городу НЕ фильтруем по адресу — 2GIS часто показывает
+            # адрес без названия города (просто "ул. Ленина, 10").
+            # Проверка города происходит через URL, этого достаточно.
             region_keywords = []
-            logger.info(f"Режим поиска по городу: '{city}' → slug='{location_slug}'")
+            logger.info(f"Режим поиска по городу: '{city}' -> slug='{location_slug}'")
 
         rubric_encoded = quote(rubric, safe='')
         search_url = f"{self.BASE_URL}/{location_slug}/search/{rubric_encoded}"
@@ -404,9 +451,12 @@ class TwoGisScraper:
 
             page = await context.new_page()
 
+            # Флаг: город подтверждён, можно собирать данные
+            city_verified = False
+
             # Перехватываем все JSON-ответы от catalog.api.2gis.ru
             async def handle_response(response):
-                nonlocal api_key
+                nonlocal api_key, city_verified
                 url = response.url
 
                 # Извлекаем внутренний API-ключ из любого запроса к catalog.api
@@ -432,6 +482,10 @@ class TwoGisScraper:
                 if not items:
                     return
 
+                # Если город ещё не подтверждён — складываем во временный буфер.
+                # После подтверждения перенесём в основной список.
+                target = raw_items if city_verified else pending_items
+
                 for item in items:
                     if "name" not in item:
                         continue
@@ -442,66 +496,106 @@ class TwoGisScraper:
                         continue
 
                     item_id = item.get("id", "")
-                    if not item_id or item_id in seen_ids:
+                    if not item_id:
                         continue
-                    seen_ids.add(item_id)
-                    raw_items.append(item)
+                    numeric_id = item_id.split("_")[0] if "_" in item_id else item_id
+                    if numeric_id in seen_ids:
+                        continue
+                    seen_ids.add(numeric_id)
+                    target.append(item)
 
-                    if on_progress:
+                    if city_verified and on_progress:
                         on_progress(len(raw_items), item.get("name", ""))
 
             page.on("response", handle_response)
 
-            # Сначала открываем главную страницу 2GIS для установки cookies
-            # Используем 30с timeout — museum-страница может грузиться медленно
-            try:
-                await page.goto(f"{self.BASE_URL}/{location_slug}", wait_until="domcontentloaded", timeout=30000)
+            # === Навигация: сразу на страницу поиска, без предварительной главной ===
+            # Раньше открывали главную страницу — 2GIS мог перенаправить на
+            # Новосибирск и запомнить этот город в cookies. Теперь идём прямо
+            # на URL поиска и проверяем, что город правильный.
+
+            for attempt in range(3):
+                if should_stop and should_stop():
+                    break
+
+                # Очищаем cookies перед каждой попыткой — 2GIS не должен
+                # помнить предыдущий город
+                await context.clear_cookies()
+
+                try:
+                    await page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
+                except Exception as e:
+                    logger.warning(f"Попытка {attempt+1}: ошибка загрузки — {e}")
+                    await asyncio.sleep(3)
+                    continue
+
                 await asyncio.sleep(3)
-            except Exception as e:
-                logger.warning(f"Ошибка загрузки главной страницы: {e}")
 
-            # Обработка museum-страницы (антибот) на главной
-            if "museum" in page.url:
-                logger.info("Museum page on main, handling...")
-                try:
-                    btn = page.locator("#acceptRiskButton")
-                    if await btn.count() > 0:
-                        await btn.click()
+                # Обработка captcha / museum (антибот 2GIS)
+                current = page.url
+                if "captcha" in current or "museum" in current:
+                    logger.warning(f"Попытка {attempt+1}: антибот-страница ({current})")
+                    try:
+                        btn = page.locator("#acceptRiskButton")
+                        if await btn.count() > 0:
+                            await btn.click()
+                            await asyncio.sleep(5)
+                    except Exception:
+                        pass
+                    # Пробуем снова
+                    try:
+                        await page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
                         await asyncio.sleep(5)
-                except Exception as e:
-                    logger.warning(f"Museum handling error: {e}")
+                    except Exception as e:
+                        logger.warning(f"Попытка {attempt+1}: повторный переход не удался — {e}")
+                        continue
 
-            # Теперь открываем страницу поиска
-            try:
-                await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-            except Exception as e:
-                logger.warning(f"Ошибка загрузки страницы поиска: {e}")
+                # Проверяем, что мы в правильном городе
+                current = page.url
+                logger.info(f"Попытка {attempt+1}: текущий URL = {current}")
 
-            await asyncio.sleep(3)
+                # Извлекаем slug из URL
+                url_match = re.search(r'2gis\.ru/([a-z0-9-]+)', current)
+                actual_slug = url_match.group(1) if url_match else ""
 
-            # Если снова museum — кликаем и перенаправляем
-            if "museum" in page.url:
-                logger.info("Museum page on search, handling...")
-                try:
-                    btn = page.locator("#acceptRiskButton")
-                    if await btn.count() > 0:
-                        await btn.click()
-                        await asyncio.sleep(3)
-                except Exception:
-                    pass
-                try:
-                    await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-                    await asyncio.sleep(5)
-                except Exception as e:
-                    logger.warning(f"Re-navigation error: {e}")
+                if actual_slug == location_slug:
+                    city_verified = True
+                    logger.info(f"Город подтверждён: slug='{actual_slug}'")
+                    break
+                else:
+                    logger.warning(
+                        f"Попытка {attempt+1}: 2GIS загрузил город '{actual_slug}' "
+                        f"вместо '{location_slug}'. Очищаем cookies и пробуем снова..."
+                    )
+                    # Очищаем собранные данные от неправильного города
+                    raw_items.clear()
+                    pending_items.clear()
+                    seen_ids.clear()
+                    await asyncio.sleep(3)
 
-            logger.info(f"Current URL: {page.url}")
+            if not city_verified:
+                logger.error(
+                    f"Не удалось загрузить город '{city}' (slug='{location_slug}') "
+                    f"после 3 попыток. 2GIS перенаправляет на другой город."
+                )
+                await browser.close()
+                return []
+
+            # Переносим данные из временного буфера в основной список.
+            # Эти компании были получены при первичной загрузке страницы,
+            # до того как мы подтвердили город.
+            if pending_items:
+                raw_items.extend(pending_items)
+                logger.info(f"Перенесено {len(pending_items)} компаний из буфера в основной список")
+                pending_items.clear()
+                if on_progress:
+                    on_progress(len(raw_items), "загрузка начальной страницы")
 
             # Ждём загрузки результатов
             await asyncio.sleep(5)
 
             # Скроллим для подгрузки большего числа компаний (маркеров)
-            await self._scroll_for_items(page, raw_items, seen_ids, max_results, on_progress)
+            await self._scroll_for_items(page, raw_items, seen_ids, max_results, on_progress, should_stop)
 
             logger.info(f"Собрано {len(raw_items)} компаний из маркеров")
 
@@ -509,7 +603,7 @@ class TwoGisScraper:
             # 2GIS сам делает items/byid запрос при открытии карточки компании
             companies = await self._enrich_by_visiting(
                 page, raw_items, location_slug, max_results, on_progress,
-                region_keywords=region_keywords,
+                region_keywords=region_keywords, should_stop=should_stop,
             )
 
             await browser.close()
@@ -517,13 +611,15 @@ class TwoGisScraper:
         logger.info(f"Скрапер: итогого {len(companies)} компаний с контактами")
         return companies
 
-    async def _scroll_for_items(self, page, raw_items, seen_ids, max_results, on_progress):
+    async def _scroll_for_items(self, page, raw_items, seen_ids, max_results, on_progress, should_stop=None):
         """Скроллит страницу для подгрузки большего числа маркеров."""
         prev_count = 0
         stagnant_rounds = 0
         max_stagnant = 10
 
         while len(raw_items) < max_results and stagnant_rounds < max_stagnant:
+            if should_stop and should_stop():
+                break
             # Скроллим вниз
             for _ in range(3):
                 await page.evaluate("window.scrollBy(0, 500)")
@@ -546,12 +642,17 @@ class TwoGisScraper:
             except Exception:
                 pass
 
-    async def _enrich_by_visiting(self, page, raw_items: list[dict], city_slug: str, max_results: int, on_progress, region_keywords: list = None) -> list[Company]:
+    async def _enrich_by_visiting(self, page, raw_items: list[dict], city_slug: str, max_results: int, on_progress, region_keywords: list = None, should_stop=None) -> list[Company]:
         """Открывает страницу каждой компании и парсит контакты из HTML.
-        2GIS рендерит контакты (телефон, VK, TG, WA, сайт) прямо в HTML карточки."""
+        2GIS рендерит контакты (телефон, VK, TG, WA, сайт) прямо в HTML карточки.
+        Обрабатывает больше маркеров, чем max_results, т.к. многие окажутся дубликатами."""
         companies: list[Company] = []
 
-        for i, raw_item in enumerate(raw_items[:max_results]):
+        collect_limit = min(len(raw_items), max_results * 2)
+
+        for i, raw_item in enumerate(raw_items[:collect_limit]):
+            if should_stop and should_stop():
+                break
             item_id = str(raw_item.get("id", ""))
             name = raw_item.get("name", "")
 
@@ -572,32 +673,34 @@ class TwoGisScraper:
             full_id = str(raw_item.get("id", ""))
             numeric_id = full_id.split("_")[0] if "_" in full_id else full_id
 
-            # Проверяем принадлежность к региону по адресу из маркера (быстрая проверка до запроса)
+            # Проверяем принадлежность к региону по адресу из маркера.
+            # ВАЖНО: 2GIS часто показывает только улицу и дом без названия города.
+            # Фильтруем только если адрес явно содержит другой город/регион.
             if region_keywords:
                 raw_address = raw_item.get("address_name", "") or raw_item.get("full_address_name", "")
-                if raw_address and not _address_matches_region(raw_address, region_keywords):
-                    logger.debug(f"Пропускаем '{name}' — адрес '{raw_address}' не принадлежит региону")
+                if raw_address and _address_explicitly_outside_region(raw_address, region_keywords):
+                    logger.debug(f"Пропускаем '{name}' - адрес '{raw_address}' явно вне региона")
                     continue
 
             # Строим URL карточки компании
             firm_url = f"{self.BASE_URL}/{city_slug}/firm/{numeric_id}"
 
             try:
-                await page.goto(firm_url, wait_until="domcontentloaded", timeout=15000)
-                await asyncio.sleep(5)
+                await page.goto(firm_url, wait_until="domcontentloaded", timeout=8000)
+                await asyncio.sleep(0.6)
             except Exception:
                 companies.append(company)
                 continue
 
-            # Если попали на museum — обрабатываем
-            if "museum" in page.url:
+            # Если попали на captcha/museum - обрабатываем
+            if "captcha" in page.url or "museum" in page.url:
                 try:
                     btn = page.locator("#acceptRiskButton")
                     if await btn.count() > 0:
                         await btn.click()
-                        await asyncio.sleep(5)
-                        await page.goto(firm_url, wait_until="domcontentloaded", timeout=15000)
                         await asyncio.sleep(3)
+                        await page.goto(firm_url, wait_until="domcontentloaded", timeout=10000)
+                        await asyncio.sleep(2)
                 except Exception:
                     pass
 
@@ -607,28 +710,27 @@ class TwoGisScraper:
                 self._parse_contacts_from_html(html, company)
                 self._extract_first_review_date(html, company)
                 # Дополнительная проверка адреса по HTML (адрес может быть полнее)
-                if region_keywords and company.address:
-                    if not _address_matches_region(company.address, region_keywords):
-                        logger.info(f"Отсеян '{name}' — адрес '{company.address}' не соответствует региону")
-                        continue
+                if region_keywords and not _address_matches_region(company.address, region_keywords):
+                    logger.info(f"Отсеян '{name}' - адрес '{company.address}' не соответствует региону")
+                    continue
             except Exception as e:
                 logger.debug(f"HTML parse error for {name}: {e}")
 
             companies.append(company)
 
             # Небольшая задержка
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.1)
 
         return companies
 
     def _parse_contacts_from_html(self, html: str, company: Company):
         """Извлекает контакты из HTML страницы компании 2GIS.
-        Приоритет: __NEXT_DATA__ (структурированные данные) → link.2gis.ru (base64-ссылки) → regex."""
+        Приоритет: __NEXT_DATA__ (структурированные данные) -> link.2gis.ru (base64-ссылки) -> regex."""
         import re as _re
         import base64 as _b64
         import json as _json
 
-        # 1. Парсим __NEXT_DATA__ — там контакты в структурированном виде
+        # 1. Парсим __NEXT_DATA__ - там контакты в структурированном виде
         next_data_match = _re.search(
             r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, _re.DOTALL
         )
@@ -636,6 +738,7 @@ class TwoGisScraper:
             try:
                 next_data = _json.loads(next_data_match.group(1))
                 self._extract_contacts_from_next_data(next_data, company)
+                self._extract_address_from_next_data(next_data, company)
             except Exception:
                 pass
 
@@ -645,7 +748,7 @@ class TwoGisScraper:
 
         # 3. Regex fallback для телефонов (если __NEXT_DATA__ не дал)
         if not company.phones:
-            phone_matches = _re.findall(r'\+7[\d\s\-\(\)]{10,17}', html)
+            phone_matches = _re.findall(r'(?:\+7|8)[\d\s\-\(\)]{10,17}', html)
             seen = set()
             for phone in phone_matches:
                 phone_clean = phone.strip()
@@ -676,7 +779,7 @@ class TwoGisScraper:
                 company.whatsapp_url = wa_url
                 company.raw_contacts.append({"type": "whatsapp", "value": wa_url})
 
-        # 5. Regex fallback для сайта — ищем домены в видимом тексте
+        # 5. Regex fallback для сайта - ищем домены в видимом тексте
         if not company.website:
             # Ищем домены вида example.ru в тексте (не в href, а просто текст)
             # 2GIS показывает сайт как текст: white-dental.ru
@@ -687,7 +790,7 @@ class TwoGisScraper:
             for domain in domain_matches:
                 domain_lower = domain.lower()
                 # Фильтруем 2gis, соцсети, рекламные и служебные домены
-                if any(x in domain_lower for x in ('2gis', 'yandex', 'vk.com', 't.me', 'wa.me', 'mail.ru', 'top100', 'tns', 'adfox', 'otello', 'doubleclick', 'mc.', 'top-fwz', 'facebook', 'google', 'apple', 'instagram')):
+                if any(x in domain_lower for x in ('2gis', 'yandex', 'vk.com', 't.me', 'wa.me', 'mail.ru', 'top100', 'tns', 'adfox', 'otello', 'doubleclick', 'mc.', 'top-fwz', 'facebook', 'google', 'apple', 'instagram', 'error', 'booking', 'yclients', 'dikidi', 'example', 'localhost', 'no-site', 'nosite')):
                     continue
                 # Фильтруем соцсети, агрегаторы, трекеры, конструкторы
                 if not _is_valid_company_site(domain_lower):
@@ -711,10 +814,41 @@ class TwoGisScraper:
         firm = props.get("firm") or props.get("branch") or {}
         if isinstance(firm, dict):
             contact_groups = firm.get("contact_groups", [])
+            if not company.address:
+                company.address = firm.get("address_name", "") or firm.get("address", "") or ""
+            reviews = firm.get("reviews") if isinstance(firm.get("reviews"), dict) else {}
+            rating = _first_not_none(firm.get("rating"), reviews.get("rating"), reviews.get("general_rating"), firm.get("review_rating"))
+            reviews_count = _first_not_none(
+                firm.get("reviews_count"), firm.get("review_count"), reviews.get("count"),
+                reviews.get("general_review_count"), reviews.get("general_rating_count"),
+            )
+            org = firm.get("org") if isinstance(firm.get("org"), dict) else {}
+            branches_count = _first_not_none(firm.get("branches_count"), firm.get("branch_count"), org.get("branch_count"))
+            try:
+                if rating is not None:
+                    company.rating = float(rating)
+                if reviews_count is not None:
+                    company.reviews_count = int(reviews_count)
+                if branches_count is not None:
+                    company.branches_count = max(1, int(branches_count))
+            except (TypeError, ValueError):
+                pass
 
         # Путь 2: ищем вглубь через поиск по ключу
         if not contact_groups:
             contact_groups = self._find_key_recursive(next_data, "contact_groups") or []
+        if company.rating is None or not company.reviews_count:
+            reviews = self._find_key_recursive(next_data, "reviews") or {}
+            if isinstance(reviews, dict):
+                rating = _first_not_none(reviews.get("general_rating"), reviews.get("rating"))
+                count = _first_not_none(reviews.get("general_review_count"), reviews.get("general_rating_count"), reviews.get("count"))
+                try:
+                    if company.rating is None and rating is not None:
+                        company.rating = float(rating)
+                    if not company.reviews_count and count is not None:
+                        company.reviews_count = int(count)
+                except (TypeError, ValueError):
+                    pass
 
         for group in contact_groups:
             if not isinstance(group, dict):
@@ -766,7 +900,7 @@ class TwoGisScraper:
         )
         for encoded in redirect_matches:
             try:
-                # base64url → base64
+                # base64url -> base64
                 padded = encoded + "=" * (4 - len(encoded) % 4) if len(encoded) % 4 else encoded
                 decoded = _b64.urlsafe_b64decode(padded).decode("utf-8", errors="ignore")
                 # В декодированном тексте ищем URL
@@ -787,25 +921,44 @@ class TwoGisScraper:
                 continue
 
     def _extract_first_review_date(self, html: str, company: Company):
-        """Извлекает самую раннюю дату из HTML страницы компании.
-        2GIS рендерит даты отзывов в формате ISO (2024-01-15T14:30).
-        Самая ранняя дата ≈ дата первого отзыва ≈ начало активности компании."""
+        """Извлекает самую раннюю дату только из review-разделов __NEXT_DATA__."""
+        import json as _json
         import re as _re
         from datetime import datetime as _dt
 
-        # Ищем все ISO даты: 2020-06-15T00:00 или 2024-01-15T14:30
-        iso_dates = _re.findall(r'(20\d{2}-\d{2}-\d{2}T\d{2}:\d{2})', html)
-        if not iso_dates:
+        match = _re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, _re.DOTALL)
+        if not match:
             return
-
-        # Сортируем и берём самую раннюю
-        iso_dates.sort()
-        earliest_str = iso_dates[0]
-
         try:
-            company.first_review_date = _dt.strptime(earliest_str, "%Y-%m-%dT%H:%M")
-        except ValueError:
-            pass
+            data = _json.loads(match.group(1))
+        except (TypeError, ValueError):
+            return
+        values = []
+
+        def walk(obj, in_reviews=False, depth=0):
+            if depth > 12:
+                return
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    walk(value, in_reviews or "review" in key.lower(), depth + 1)
+            elif isinstance(obj, list):
+                for value in obj:
+                    walk(value, in_reviews, depth + 1)
+            elif in_reviews and isinstance(obj, str):
+                values.extend(_re.findall(r'20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}', obj))
+
+        walk(data)
+        now = _dt.now()
+        dates = []
+        for value in values:
+            try:
+                date = _dt.strptime(value, "%Y-%m-%dT%H:%M")
+                if _dt(1990, 1, 1) <= date <= now:
+                    dates.append(date)
+            except ValueError:
+                continue
+        if dates:
+            company.first_review_date = min(dates)
 
     def _find_key_recursive(self, obj, key: str, max_depth: int = 5):
         """Рекурсивно ищет значение ключа в вложенной структуре dict/list."""
@@ -825,6 +978,34 @@ class TwoGisScraper:
                     return result
         return None
 
+    def _extract_address_from_next_data(self, next_data: dict, company: Company):
+        """Рекурсивно ищет и сохраняет адрес компании из __NEXT_DATA__."""
+        if company.address:
+            return
+        candidates = []
+        address_keys = ("address_name", "full_address_name", "formatted_address", "address")
+
+        def _walk(obj, depth=0):
+            if depth > 6 or isinstance(obj, (str, int, float, bool, type(None))):
+                return
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    if k.lower() in address_keys and isinstance(v, str) and v.strip():
+                        candidates.append(v.strip())
+                    _walk(v, depth + 1)
+            elif isinstance(obj, list):
+                for item in obj:
+                    _walk(item, depth + 1)
+
+        try:
+            _walk(next_data)
+        except Exception:
+            return
+
+        if candidates:
+            # Берём самый длинный вариант - обычно это полный адрес
+            company.address = max(candidates, key=len)
+
     def _parse_item(self, item: dict) -> Optional[Company]:
         """Парсит элемент из ответа API 2GIS в объект Company."""
         name = item.get("name", "")
@@ -833,6 +1014,28 @@ class TwoGisScraper:
 
         company = Company(name=name)
         company.address = item.get("address_name", "")
+        company.source_id = str(item.get("id", "")).split("_")[0]
+
+        reviews = item.get("reviews") if isinstance(item.get("reviews"), dict) else {}
+        rating = _first_not_none(item.get("rating"), reviews.get("rating"), reviews.get("general_rating"), item.get("review_rating"))
+        reviews_count = _first_not_none(
+            item.get("reviews_count"), item.get("review_count"), reviews.get("count"),
+            reviews.get("general_review_count"), reviews.get("general_rating_count"), 0,
+        )
+        org = item.get("org") if isinstance(item.get("org"), dict) else {}
+        branches_count = _first_not_none(item.get("branches_count"), item.get("branch_count"), org.get("branch_count"), 1)
+        try:
+            company.rating = float(rating) if rating is not None else None
+        except (TypeError, ValueError):
+            company.rating = None
+        try:
+            company.reviews_count = int(reviews_count)
+        except (TypeError, ValueError):
+            company.reviews_count = 0
+        try:
+            company.branches_count = max(1, int(branches_count))
+        except (TypeError, ValueError):
+            company.branches_count = 1
 
         point = item.get("point", {})
         if point:
@@ -890,7 +1093,10 @@ def search_companies_sync(
     headless: bool = True,
     on_progress: Optional[Callable] = None,
     region: str = "",
+    should_stop: Optional[Callable[[], bool]] = None,
 ) -> list[Company]:
     """Синхронная обёртка для скрапера 2GIS."""
     scraper = TwoGisScraper(timeout=timeout, headless=headless)
-    return asyncio.run(scraper.search_companies(city, rubric, max_results, on_progress, region=region))
+    return asyncio.run(scraper.search_companies(
+        city, rubric, max_results, on_progress, region=region, should_stop=should_stop,
+    ))

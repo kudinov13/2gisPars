@@ -15,12 +15,29 @@ class Company:
     rubrics: list[str] = field(default_factory=list)
     lat: Optional[float] = None
     lon: Optional[float] = None
+    source_id: str = ""
+    city: str = ""
+    rating: Optional[float] = None
+    reviews_count: int = 0
+    branches_count: int = 1
 
     # Результаты анализа
     has_site: bool = False
     site_issues: list[str] = field(default_factory=list)
     site_critical_issues: list[str] = field(default_factory=list)
     site_is_good: bool = False
+    site_load_time: Optional[float] = None
+    site_status_code: Optional[int] = None
+    site_audit_score: Optional[int] = None
+    site_audit_confidence: str = ""
+
+    # Квалификация лида
+    lead_score: int = 0
+    lead_reasons: list[str] = field(default_factory=list)
+    business_size: str = "не определён"
+    business_size_reasons: list[str] = field(default_factory=list)
+    sales_status: str = "Новый"
+    sales_comment: str = ""
 
     # Возраст
     domain_created_date: Optional[datetime] = None

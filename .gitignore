@@ -31,6 +31,9 @@ ENV/
 # Generated reports (не нужны в репозитории)
 report.xlsx
 *.xlsx
+parser_company.db
+parser_company.db-shm
+parser_company.db-wal
 
 # Logs
 *.log

@@ -692,13 +692,24 @@ tr.expanded td{
         </div>
 
         <div class="field">
-          <label class="field-label">Город <span id="cityHint" style="color:var(--fg-dim);font-size:9px">используется если регион не заполнен</span></label>
-          <input type="text" class="field-input" id="city" value="Новосибирск" placeholder="Введите город">
+          <label class="field-label">Города <span id="cityHint" style="color:var(--fg-dim);font-size:9px">через запятую; регион отключает города</span></label>
+          <input type="text" class="field-input" id="city" value="Новосибирск" placeholder="Новосибирск, Барнаул, Томск">
         </div>
 
         <div class="field">
-          <label class="field-label">Сфера деятельности</label>
-          <input type="text" class="field-input" id="rubric" value="стоматология" placeholder="Напр: ремонт квартир">
+          <label class="field-label">Ниши</label>
+          <input type="text" class="field-input" id="rubric" value="стоматология" placeholder="ремонт квартир, клининг">
+        </div>
+
+        <div class="field">
+          <label class="field-label">Режим отбора</label>
+          <select class="field-input" id="leadMode">
+            <option value="sales_ready">Готовые к продаже</option>
+            <option value="no_site">Только без сайта</option>
+            <option value="problem_site">Без сайта или с проблемами</option>
+            <option value="high_rating_no_site">Рейтинг 4.5+ без сайта</option>
+            <option value="all">Все компании</option>
+          </select>
         </div>
 
         <div class="field">
@@ -716,10 +727,18 @@ tr.expanded td{
       <div class="section">
         <div class="section-title">[ FILTERS ]</div>
 
-        <div class="toggle active" data-toggle="requireMessenger">
+        <div class="toggle" data-toggle="requireMessenger">
           <div>
-            <div class="toggle-label">Наличие мессенджера</div>
-            <div class="toggle-desc">VK / Telegram / WhatsApp</div>
+            <div class="toggle-label">Только с мессенджером</div>
+            <div class="toggle-desc">По умолчанию не отбрасываем</div>
+          </div>
+          <div class="toggle-switch"></div>
+        </div>
+
+        <div class="toggle active" data-toggle="useNicheSynonyms">
+          <div>
+            <div class="toggle-label">Синонимы ниш</div>
+            <div class="toggle-desc">Расширить поисковые запросы</div>
           </div>
           <div class="toggle-switch"></div>
         </div>
@@ -767,6 +786,16 @@ tr.expanded td{
         </div>
       </div>
 
+      <div class="section">
+        <div class="section-title">[ SAVED LISTS ]</div>
+        <select class="field-input" id="savedRuns"><option value="">Нет сохранённых запусков</option></select>
+        <div class="field-row" style="margin-top:10px">
+          <button class="btn btn-secondary" id="openRunBtn"><span>ОТКРЫТЬ</span></button>
+          <button class="btn btn-secondary" id="resumeRunBtn"><span>ПРОДОЛЖИТЬ</span></button>
+        </div>
+        <button class="btn btn-stop" id="deleteRunBtn" style="margin-top:10px"><span>УДАЛИТЬ СПИСОК</span></button>
+      </div>
+
       <!-- Actions -->
       <div class="section" style="border-bottom:none;flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:10px">
         <button class="btn btn-primary" id="startBtn">
@@ -807,11 +836,14 @@ tr.expanded td{
             <tr>
               <th style="width:30px">#</th>
               <th>Название</th>
+              <th>Рейтинг</th>
+              <th>Отзывы</th>
               <th>Телефон</th>
               <th>Сайт</th>
-              <th>Мессенджеры</th>
-              <th>Возраст</th>
-              <th>Проблемы сайта</th>
+              <th>Лид</th>
+              <th>Бизнес</th>
+              <th>Аудит</th>
+              <th>Статус</th>
               <th>Рубрики</th>
             </tr>
           </thead>
@@ -839,7 +871,8 @@ tr.expanded td{
 // ===== STATE =====
 const state = {
   toggles: {
-    requireMessenger: true,
+    requireMessenger: false,
+    useNicheSynonyms: true,
     requirePhone: true,
     onlyYoung: false,
     checkWebsites: true,
@@ -847,6 +880,7 @@ const state = {
   },
   polling: null,
   results: [],
+  runId: null,
 };
 
 // ===== TOGGLES =====
@@ -873,16 +907,21 @@ youngMonths.addEventListener('input', () => {
 document.getElementById('startBtn').addEventListener('click', startParser);
 document.getElementById('stopBtn').addEventListener('click', stopParser);
 document.getElementById('downloadBtn').addEventListener('click', () => {
-  window.open('/api/download', '_blank');
+  window.open('/api/download' + (state.runId ? '?run_id=' + state.runId : ''), '_blank');
 });
+document.getElementById('openRunBtn').addEventListener('click', openSavedRun);
+document.getElementById('resumeRunBtn').addEventListener('click', resumeSavedRun);
+document.getElementById('deleteRunBtn').addEventListener('click', deleteSavedRun);
 
 // ===== PARSER CONTROL =====
 async function startParser() {
   const regionVal = document.getElementById('region').value.trim();
   const config = {
-    city: document.getElementById('city').value.trim(),
+    cities: document.getElementById('city').value.split(',').map(x => x.trim()).filter(Boolean),
     region: regionVal,
-    rubric: document.getElementById('rubric').value.trim(),
+    rubrics: document.getElementById('rubric').value.split(',').map(x => x.trim()).filter(Boolean),
+    lead_mode: document.getElementById('leadMode').value,
+    use_niche_synonyms: state.toggles.useNicheSynonyms,
     vk_token: document.getElementById('vkToken').value.trim(),
     max_results: parseInt(document.getElementById('maxResults').value) || 500,
     require_messenger: state.toggles.requireMessenger,
@@ -893,7 +932,7 @@ async function startParser() {
     skip_good_sites: state.toggles.skipGood,
   };
 
-  if ((!config.city && !config.region) || !config.rubric) {
+  if ((config.cities.length === 0 && !config.region) || config.rubrics.length === 0) {
     showStatus('ERROR: Укажите город или регион, и сферу деятельности', true);
     return;
   }
@@ -931,8 +970,8 @@ async function startParser() {
 
 async function stopParser() {
   await fetch('/api/stop', {method: 'POST'});
-  resetUI();
-  showStatus('Остановлено пользователем', false);
+  showStatus('Останавливаю после текущей операции...', false);
+  document.getElementById('stopBtn').style.display = 'none';
 }
 
 function startPolling() {
@@ -956,6 +995,7 @@ async function pollStatus() {
 
     // Update status
     document.getElementById('statusStep').textContent = data.current_step || '...';
+    if (data.run_id) state.runId = data.run_id;
 
     if (data.error) {
       showStatus('ERROR: ' + data.error, true);
@@ -966,7 +1006,12 @@ async function pollStatus() {
     if (data.finished) {
       await loadResults();
       resetUI();
+      await loadRuns();
       showStatus('Готово. Найдено: ' + state.results.length + ' компаний', false);
+    } else if (data.stopped && !data.running) {
+      resetUI();
+      await loadRuns();
+      showStatus(data.current_step, false);
     }
   } catch(e) {
     console.error('Poll error:', e);
@@ -974,7 +1019,7 @@ async function pollStatus() {
 }
 
 async function loadResults() {
-  const resp = await fetch('/api/results');
+  const resp = await fetch('/api/results' + (state.runId ? '?run_id=' + state.runId : ''));
   const data = await resp.json();
   state.results = data.results || [];
   renderResults();
@@ -1003,9 +1048,9 @@ function renderResults() {
     if (c.is_young) youngCount++;
 
     const messengers = [];
-    if (c.vk && c.vk !== '—') messengers.push('VK');
-    if (c.telegram && c.telegram !== '—') messengers.push('TG');
-    if (c.whatsapp && c.whatsapp !== '—') messengers.push('WA');
+    if (c.vk && c.vk !== '-') messengers.push('VK');
+    if (c.telegram && c.telegram !== '-') messengers.push('TG');
+    if (c.whatsapp && c.whatsapp !== '-') messengers.push('WA');
 
     const tr = document.createElement('tr');
     tr.classList.add('row-enter');
@@ -1020,19 +1065,25 @@ function renderResults() {
       : '';
     const siteProblems = criticalHtml + issuesHtml || '<span class="issue-text">—</span>';
 
+    const statuses = ['Новый','Подготовлен','Позвонили','Перезвонить','Не дозвонились','Не актуально','Сайт заказан','Отказ'];
     tr.innerHTML = `
       <td>${i + 1}</td>
       <td style="color:var(--fg);font-weight:600">${escapeHtml(c.name)}</td>
+      <td>${c.rating === null ? '—' : Number(c.rating).toFixed(1)}</td>
+      <td>${c.reviews_count || 0}</td>
       <td>${escapeHtml(c.phone)}</td>
-      <td>${c.website !== '—' ? escapeHtml(c.website) : '<span style="color:var(--fg-dim)">—</span>'}</td>
-      <td>${messengers.length > 0 ? messengers.map(m => `<span class="critical-badge" style="background:var(--border-bright);color:var(--fg)">${m}</span>`).join('') : '<span style="color:var(--fg-dim)">—</span>'}</td>
-      <td>${c.age_months !== null ? escapeHtml(c.age_display) : '<span style="color:var(--fg-dim)">?</span>'}${c.is_young ? ' <span class="critical-badge">YOUNG</span>' : ''}</td>
-      <td>${siteProblems}</td>
+      <td>${c.website !== 'нет сайта' ? escapeHtml(c.website) : '<span style="color:var(--accent);font-weight:700">НЕТ САЙТА</span>'}</td>
+      <td><b>${c.lead_score}</b>/100</td>
+      <td>${escapeHtml(c.business_size)}</td>
+      <td>${c.site_audit_score === null ? '—' : c.site_audit_score + '/100'}</td>
+      <td><select class="field-input sales-status">${statuses.map(s => `<option ${s === c.sales_status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
       <td style="color:var(--fg-dim)">${escapeHtml(c.rubrics)}</td>
     `;
 
-    // Expand row on click
     tr.addEventListener('click', () => toggleExpandRow(tr, c));
+    const statusSelect = tr.querySelector('.sales-status');
+    statusSelect.addEventListener('click', event => event.stopPropagation());
+    statusSelect.addEventListener('change', event => updateLead(c, event.target.value));
 
     tbody.appendChild(tr);
   });
@@ -1053,7 +1104,7 @@ function toggleExpandRow(tr, company) {
   const expandTr = document.createElement('tr');
   expandTr.classList.add('expanded');
   const td = document.createElement('td');
-  td.colSpan = 8;
+  td.colSpan = 11;
 
   const criticalList = company.site_critical.length > 0
     ? company.site_critical.map(x => `<li>${escapeHtml(x)}</li>`).join('')
@@ -1065,7 +1116,8 @@ function toggleExpandRow(tr, company) {
 
   const contacts = [];
   if (company.phone) contacts.push(`<li>Телефон: ${escapeHtml(company.phone)}</li>`);
-  if (company.website !== '—') contacts.push(`<li>Сайт: ${escapeHtml(company.website)}</li>`);
+  if (company.website !== 'нет сайта') contacts.push(`<li>Сайт: ${escapeHtml(company.website)}</li>`);
+  else contacts.push(`<li style="color:var(--accent)">Сайт: НЕТ САЙТА</li>`);
   if (company.vk !== '—') contacts.push(`<li>VK: ${escapeHtml(company.vk)}</li>`);
   if (company.telegram !== '—') contacts.push(`<li>Telegram: ${escapeHtml(company.telegram)}</li>`);
   if (company.whatsapp !== '—') contacts.push(`<li>WhatsApp: ${escapeHtml(company.whatsapp)}</li>`);
@@ -1083,12 +1135,81 @@ function toggleExpandRow(tr, company) {
         <ul>${criticalList}</ul>
         <h4 style="margin-top:10px">// МИНОРНЫЕ ПРОБЛЕМЫ САЙТА</h4>
         <ul>${issuesList}</ul>
+        <h4 style="margin-top:10px">// ОЦЕНКА ЛИДА</h4>
+        <ul>${company.lead_reasons.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+        <h4 style="margin-top:10px">// КЛАССИФИКАЦИЯ</h4>
+        <ul>${company.business_size_reasons.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+        <textarea class="field-input sales-comment" style="margin-top:12px" placeholder="Комментарий менеджера">${escapeHtml(company.sales_comment)}</textarea>
+        <button class="btn btn-secondary save-comment" style="margin-top:8px"><span>СОХРАНИТЬ КОММЕНТАРИЙ</span></button>
       </div>
     </div>
   `;
 
+  td.querySelector('.save-comment').addEventListener('click', event => {
+    event.stopPropagation();
+    updateLead(company, company.sales_status, td.querySelector('.sales-comment').value);
+  });
   expandTr.appendChild(td);
   tr.after(expandTr);
+}
+
+async function updateLead(company, salesStatus, salesComment = company.sales_comment || '') {
+  if (!state.runId) return;
+  const resp = await fetch(`/api/runs/${state.runId}/leads`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({lead_key: company.lead_key, sales_status: salesStatus, sales_comment: salesComment}),
+  });
+  if (resp.ok) {
+    company.sales_status = salesStatus;
+    company.sales_comment = salesComment;
+    showStatus('Карточка лида сохранена', false);
+  }
+}
+
+async function loadRuns() {
+  const resp = await fetch('/api/runs');
+  const data = await resp.json();
+  const select = document.getElementById('savedRuns');
+  select.innerHTML = data.runs.length ? data.runs.map(run => {
+    const label = `#${run.id} · ${run.status} · ${run.results_count} · ${run.created_at.replace('T', ' ')}`;
+    return `<option value="${run.id}">${escapeHtml(label)}</option>`;
+  }).join('') : '<option value="">Нет сохранённых запусков</option>';
+}
+
+async function openSavedRun() {
+  const runId = parseInt(document.getElementById('savedRuns').value);
+  if (!runId) return;
+  state.runId = runId;
+  await loadResults();
+  showStatus(`Открыт сохранённый список #${runId}`, false);
+}
+
+async function resumeSavedRun() {
+  const runId = parseInt(document.getElementById('savedRuns').value);
+  if (!runId) return;
+  const resp = await fetch(`/api/runs/${runId}/resume`, {method: 'POST'});
+  const data = await resp.json();
+  if (!resp.ok) return showStatus('ERROR: ' + data.error, true);
+  state.runId = runId;
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('stopBtn').style.display = 'flex';
+  startPolling();
+}
+
+async function deleteSavedRun() {
+  const runId = parseInt(document.getElementById('savedRuns').value);
+  if (!runId || !confirm(`Удалить сохранённый список #${runId} и его Excel-отчёт?`)) return;
+  const resp = await fetch(`/api/runs/${runId}`, {method: 'DELETE'});
+  const data = await resp.json();
+  if (!resp.ok) return showStatus('ERROR: ' + data.error, true);
+  if (state.runId === runId) {
+    state.runId = null;
+    state.results = [];
+    renderResults();
+  }
+  await loadRuns();
+  showStatus(`Список #${runId} удалён`, false);
 }
 
 // ===== HELPERS =====
@@ -1154,6 +1275,7 @@ function updateClock() {
 }
 setInterval(updateClock, 1000);
 updateClock();
+loadRuns();
 </script>
 </body>
 </html>
